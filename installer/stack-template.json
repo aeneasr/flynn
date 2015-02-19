@@ -126,20 +126,19 @@
     "Route53RecordSet": {
       "Type": "AWS::Route53::RecordSet",
       "Properties": {
-        "SetIdentifier": "flynn-record-set",
         "HostedZoneName": { "Fn::Join": [ "", [ { "Ref": "ClusterDomain" }, "." ]] },
         "Name": {
-          "Fn::Join" : [ "", [
+          "Fn::Join": [ "", [
             { "Ref" : "EC2Instance" }, ".",
             { "Ref" : "AWS::Region" }, ".",
-            { "Ref" : "Route53HostedZone" }, "."
-          ] ]
+            { "Ref": "ClusterDomain" }, "."
+          ]]
         },
         "Type": "A",
         "ResourceRecords": [
           { "Ref": "EC2EIP" }
         ],
-        "TTL": 900
+        "TTL": "900"
       }
     },
 

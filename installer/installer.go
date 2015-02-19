@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -125,8 +126,13 @@ func waitForStackCompletion(cf *cloudformation.CloudFormation, stackID aws.Strin
 			StackName: stackID,
 		})
 		if err != nil {
-			fmt.Printf("Error: %T{%v}\n", err, err)
-			log.Fatal(err)
+			switch err.(type) {
+			case *url.Error:
+				return
+			default:
+				fmt.Printf("Error: %T{%v}\n", err, err)
+				log.Fatal(err)
+			}
 		}
 		// NOTE: some events are not returned in order (i.e. completion event returned before progress event)
 		for _, se := range res.StackEvents {
