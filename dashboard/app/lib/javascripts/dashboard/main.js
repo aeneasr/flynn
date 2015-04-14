@@ -38,12 +38,7 @@ window.Dashboard = {
 			dispatcher: this.Dispatcher,
 			trigger: false
 		});
-		if (window.location.protocol === "http:" && this.config.INSTALL_CERT) {
-			Marbles.history.navigate("installcert");
-			Marbles.history.loadURL();
-		} else {
-			Marbles.history.loadURL();
-		}
+		Marbles.history.loadURL();
 	},
 
 	__renderNavComponent: function () {
@@ -63,6 +58,90 @@ window.Dashboard = {
 	__redirectToLogin: function () {
 		var redirectPath = Marbles.history.path ? '?redirect='+ encodeURIComponent(Marbles.history.path) : '';
 		Marbles.history.navigate('login'+ redirectPath);
+	},
+
+	__catchInsecurePingResponse: function(httpsArgs) {
+		var httpsXhr = httpsArgs[1], self = this,
+			handleSuccess, handleError;
+
+		handleSuccess = function (httpArgs) {
+			var httpXhr = httpArgs[1];
+			// https did not work but http did...something is wrong with the cert
+			self.Dispatcher.handleAppEvent({
+				name: "HTTPS_CERT_MISSING",
+				status: httpXhr.status
+			});
+		};
+		handleError = function (httpArgs) {
+			var httpXhr = httpArgs[1];
+			if (httpXhr.status === 0) {
+				// https is failing as well...service is unavailable
+				self.Dispatcher.handleAppEvent({
+					name: "SERVICE_UNAVAILABLE",
+					status: httpXhr.status
+				});
+			}
+			// https did not work but http did without a network error
+			// => missing ssl exception for controller
+			self.Dispatcher.handleAppEvent({
+				name: "HTTPS_CERT_MISSING",
+				status: httpXhr.status
+			});
+		};
+
+		if (httpsXhr.status === 0) {
+			// https is unavailable, let's see if http works
+			self.client.ping("controller", "http").catch(handleError).then(handleSuccess);
+			return;
+		}
+		// We got something else than 0 and it's an error. This results in SERVICE_UNAVAILABLE
+		self.Dispatcher.handleAppEvent({
+			name: "SERVICE_UNAVAILABLE",
+			status: httpsXhr.status
+		});
+	},
+
+	__catchSecurePingResponse: function(args) {
+		var xhr = args[1];
+		if (xhr.status === 0) {
+			// We were not able to access the controller due to a network error (ssl, timeout)
+			// In order to understand what's happening, we have to switch to http.
+			this.Dispatcher.handleAppEvent({
+				name: "CONTROLLER_UNREACHABLE_FROM_HTTPS",
+				status: xhr.status
+			});
+			return;
+		}
+		// We got something else than 0 and it's an error. This results in SERVICE_UNAVAILABLE
+		this.Dispatcher.handleAppEvent({
+			name: "SERVICE_UNAVAILABLE",
+			status: xhr.status
+		});
+	},
+
+	__isCertInstalled: function() {
+		var self = this;
+		if (window.location.protocol === "https:") {
+			this.client.ping("controller", "https").catch(this.__catchSecurePingResponse.bind(this));
+		} else {
+			this.client.ping("controller", "https")
+				.catch(this.__catchInsecurePingResponse.bind(this))
+				.then(function(args) {
+					var xhr = args[1];
+					if (xhr.status !== 200) {
+						// If we don't make sure that the response was successful, we might end up in an
+						// infinite loop.
+						return;
+					}
+					// TODO this probably should be Dashboard.config.API_SERVER
+					self.client.ping("dashboard", "https").then(function() {
+						// We're on http but actually we should be on https because both dashboard as well as
+						// controller work.
+						// Since CERT_INSTALLED already got checked, we can safely assume that HTTPS *is* enabled.
+						window.location.href = window.location.href.replace("http:", "https:");
+					});
+				});
+		}
 	},
 
 	__handleEvent: function (event) {
@@ -95,11 +174,7 @@ window.Dashboard = {
 	__handleAppEvent: function (event) {
 		switch (event.name) {
 			case "CONFIG_READY":
-				if (window.location.protocol === "http:" && this.config.INSTALL_CERT) {
-					window.location.href = window.location.href.replace("http", "https");
-				} else {
-					this.__handleConfigReady();
-				}
+				this.__handleConfigReady();
 			break;
 
 			case "AUTH_CHANGE":
@@ -110,12 +185,17 @@ window.Dashboard = {
 				this.__handleGithubAuthChange(event.authenticated);
 			break;
 
+			case "CONTROLLER_UNREACHABLE_FROM_HTTPS":
+				// Controller isn't accessible via https. Redirect to http and try again.
+				window.location.href = window.location.href.replace("https", "http");
+			break;
+
+			case "HTTPS_CERT_MISSING":
+				Marbles.history.navigate("installcert");
+			break;
+
 			case "SERVICE_UNAVAILABLE":
-				if (window.location.protocol === "http:" && this.config.INSTALL_CERT) {
-					this.__handleConfigReady();
-				} else {
-					this.__handleServiceUnavailable(event.status);
-				}
+				this.__handleServiceUnavailable(event.status);
 			break;
 		}
 	},
@@ -125,6 +205,9 @@ window.Dashboard = {
 		if ( !started ) {
 			this.__started = true;
 			this.run();
+			if (this.config.INSTALL_CERT) {
+				this.__isCertInstalled();
+			}
 		}
 	},
 
