@@ -20,7 +20,6 @@ import (
 	"github.com/flynn/flynn/Godeps/_workspace/src/github.com/flynn/go-check"
 	"github.com/flynn/flynn/Godeps/_workspace/src/github.com/fsouza/go-dockerclient"
 	"github.com/flynn/flynn/Godeps/_workspace/src/golang.org/x/crypto/ssh"
-	"github.com/flynn/flynn/pkg/iotool"
 	"github.com/flynn/flynn/pkg/shutdown"
 	"github.com/flynn/flynn/test/arg"
 	"github.com/flynn/flynn/test/cluster"
@@ -58,13 +57,6 @@ func main() {
 	// defer exiting here so it runs after all other defers
 	defer func() {
 		if err != nil || res != nil && !res.Passed() {
-			if args.DumpLogs {
-				if args.Gist {
-					exec.Command("flynn-host", "upload-debug-info").Run()
-				} else if testCluster != nil {
-					testCluster.DumpLogs(&iotool.SafeWriter{W: os.Stdout})
-				}
-			}
 			os.Exit(1)
 		}
 	}()
@@ -324,9 +316,6 @@ func checkCmdResult(params []interface{}, names []string) (ok bool, msg, s strin
 		msg = "output must be a []byte or string"
 		return
 	}
-	if res.Err != nil {
-		return false, "", "", nil
-	}
 	ok = true
 	return
 }
@@ -367,6 +356,29 @@ func (succeedsChecker) Check(params []interface{}, names []string) (bool, string
 		return false, "result must be a *CmdResult"
 	}
 	return res.Err == nil, ""
+}
+
+var SuccessfulOutputContains check.Checker = successfulOutputContainsChecker{
+	&check.CheckerInfo{
+		Name:   "SuccessfulOutputContains",
+		Params: []string{"result", "contains"},
+	},
+	Succeeds,
+	OutputContains,
+}
+
+type successfulOutputContainsChecker struct {
+	*check.CheckerInfo
+	succeeds       check.Checker
+	outputContains check.Checker
+}
+
+func (s successfulOutputContainsChecker) Check(params []interface{}, names []string) (bool, string) {
+	ok, res := s.succeeds.Check(params, names)
+	if ok {
+		return s.outputContains.Check(params, names)
+	}
+	return ok, res
 }
 
 type matchesChecker struct {

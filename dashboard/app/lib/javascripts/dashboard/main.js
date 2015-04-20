@@ -15,6 +15,10 @@ window.Dashboard = {
 	waitForRouteHandler: Promise.resolve(),
 
 	run: function () {
+		var loadURL = function() {
+			Marbles.history.loadURL();
+		};
+
 		if ( Marbles.history && Marbles.history.started ) {
 			throw new Error("Marbles.history already started!");
 		}
@@ -38,7 +42,14 @@ window.Dashboard = {
 			dispatcher: this.Dispatcher,
 			trigger: false
 		});
-		Marbles.history.loadURL();
+
+		if (this.config.INSTALL_CERT) {
+			// catch should actually never get called.
+			this.__isCertInstalled().then(loadURL).catch(loadURL);
+			return;
+		}
+
+		loadURL();
 	},
 
 	__renderNavComponent: function () {
@@ -62,7 +73,7 @@ window.Dashboard = {
 
 	__catchInsecurePingResponse: function(httpsArgs) {
 		var httpsXhr = httpsArgs[1], self = this,
-			handleSuccess, handleError;
+			handleSuccess, handleError, p;
 
 		handleSuccess = function (httpArgs) {
 			var httpXhr = httpArgs[1];
@@ -91,10 +102,10 @@ window.Dashboard = {
 
 		if (httpsXhr.status === 0) {
 			// https is unavailable, let's see if http works
-			self.client.ping("controller", "http").catch(handleError).then(handleSuccess);
+			self.client.ping("controller", "http").then(handleSuccess).catch(handleError);
 			return;
 		}
-		// We got something else than 0 and it's an error. This results in SERVICE_UNAVAILABLE
+		// an error code other than 0
 		self.Dispatcher.handleAppEvent({
 			name: "SERVICE_UNAVAILABLE",
 			status: httpsXhr.status
@@ -112,35 +123,32 @@ window.Dashboard = {
 			});
 			return;
 		}
-		// We got something else than 0 and it's an error. This results in SERVICE_UNAVAILABLE
+
+		// an error code other than 0
 		this.Dispatcher.handleAppEvent({
 			name: "SERVICE_UNAVAILABLE",
 			status: xhr.status
 		});
 	},
 
+	__successPingResponse: function(args) {
+		var xhr = args[1];
+		if (xhr.status !== 200) {
+			// If we don't make sure that the response was successful, we might end up in an
+			// infinite loop.
+			return;
+		}
+		window.location.href = window.location.href.replace("http:", "https:");
+	},
+
 	__isCertInstalled: function() {
 		var self = this;
 		if (window.location.protocol === "https:") {
-			this.client.ping("controller", "https").catch(this.__catchSecurePingResponse.bind(this));
+			return self.client.ping("controller", "https").catch(self.__catchSecurePingResponse.bind(this));
 		} else {
-			this.client.ping("controller", "https")
-				.catch(this.__catchInsecurePingResponse.bind(this))
-				.then(function(args) {
-					var xhr = args[1];
-					if (xhr.status !== 200) {
-						// If we don't make sure that the response was successful, we might end up in an
-						// infinite loop.
-						return;
-					}
-					// TODO this probably should be Dashboard.config.API_SERVER
-					self.client.ping("dashboard", "https").then(function() {
-						// We're on http but actually we should be on https because both dashboard as well as
-						// controller work.
-						// Since CERT_INSTALLED already got checked, we can safely assume that HTTPS *is* enabled.
-						window.location.href = window.location.href.replace("http:", "https:");
-					});
-				});
+			return self.client.ping("controller", "https")
+				.then(self.__successPingResponse.bind(this))
+				.catch(self.__catchInsecurePingResponse.bind(this));
 		}
 	},
 
@@ -205,9 +213,6 @@ window.Dashboard = {
 		if ( !started ) {
 			this.__started = true;
 			this.run();
-			if (this.config.INSTALL_CERT) {
-				this.__isCertInstalled();
-			}
 		}
 	},
 
