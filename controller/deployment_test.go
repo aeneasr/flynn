@@ -11,9 +11,7 @@ import (
 
 func (s *S) TestCreateDeployment(c *C) {
 	app := s.createTestApp(c, &ct.App{Name: "create-deployment"})
-	release := s.createTestRelease(c, &ct.Release{
-		Processes: map[string]ct.ProcessType{"web": {}},
-	})
+	release := s.createTestRelease(c, &ct.Release{})
 	c.Assert(s.c.PutFormation(&ct.Formation{
 		AppID:     app.ID,
 		ReleaseID: release.ID,
@@ -45,9 +43,7 @@ func (s *S) TestCreateDeployment(c *C) {
 
 func (s *S) TestStreamDeployment(c *C) {
 	app := s.createTestApp(c, &ct.App{Name: "stream-deployment"})
-	release := s.createTestRelease(c, &ct.Release{
-		Processes: map[string]ct.ProcessType{"web": {}},
-	})
+	release := s.createTestRelease(c, &ct.Release{})
 	c.Assert(s.c.PutFormation(&ct.Formation{
 		AppID:     app.ID,
 		ReleaseID: release.ID,

@@ -16,7 +16,6 @@ import (
 	"github.com/flynn/flynn/controller/client"
 	tu "github.com/flynn/flynn/controller/testutils"
 	ct "github.com/flynn/flynn/controller/types"
-	hh "github.com/flynn/flynn/pkg/httphelper"
 	"github.com/flynn/flynn/pkg/postgres"
 	"github.com/flynn/flynn/pkg/random"
 	"github.com/flynn/flynn/pkg/testutils/postgres"
@@ -286,21 +285,13 @@ func (s *S) TestCreateRelease(c *C) {
 
 func (s *S) TestCreateFormation(c *C) {
 	for i, useName := range []bool{false, true} {
-		release := s.createTestRelease(c, &ct.Release{
-			Processes: map[string]ct.ProcessType{"web": {}},
-		})
+		release := s.createTestRelease(c, &ct.Release{})
 		app := s.createTestApp(c, &ct.App{Name: fmt.Sprintf("create-formation-%d", i)})
 
-		// First create a formation with an invalid process type. Will fail.
-		in := &ct.Formation{ReleaseID: release.ID, AppID: app.ID, Processes: map[string]int{"foo": 1}}
+		in := &ct.Formation{ReleaseID: release.ID, AppID: app.ID, Processes: map[string]int{"web": 1}}
 		if useName {
 			in.AppID = app.Name
 		}
-		err := s.c.PutFormation(in)
-		c.Assert(hh.IsValidationError(err), Equals, true)
-
-		// Now edit the formation to have valid process types. Should succeed.
-		in.Processes = map[string]int{"web": 1}
 		out := s.createTestFormation(c, in)
 		c.Assert(out.AppID, Equals, app.ID)
 		c.Assert(out.ReleaseID, Equals, release.ID)

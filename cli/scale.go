@@ -82,7 +82,6 @@ func runScale(args *docopt.Args, client *controller.Client) error {
 	for k, v := range current {
 		processes[k] = v
 	}
-	invalid := make([]string, 0, len(release.Processes))
 	for _, arg := range typeCounts {
 		i := strings.IndexRune(arg, '=')
 		if i < 0 {
@@ -92,15 +91,7 @@ func runScale(args *docopt.Args, client *controller.Client) error {
 		if err != nil {
 			fmt.Println(commands["scale"].usage)
 		}
-		processType := arg[:i]
-		if _, ok := release.Processes[processType]; ok {
-			processes[processType] = val
-		} else {
-			invalid = append(invalid, fmt.Sprintf("%q", processType))
-		}
-	}
-	if len(invalid) > 0 {
-		return errors.New(fmt.Sprintf("ERROR: Unknown process types: %s", strings.Join(invalid, ", ")))
+		processes[arg[:i]] = val
 	}
 	formation.Processes = processes
 
@@ -118,7 +109,7 @@ func runScale(args *docopt.Args, client *controller.Client) error {
 	fmt.Printf("scaling %s\n\n", strings.Join(scale, ", "))
 
 	events := make(chan *ct.JobEvent)
-	stream, err := client.StreamJobEvents(app, events)
+	stream, err := client.StreamJobEvents(app, 0, events)
 	if err != nil {
 		return err
 	}

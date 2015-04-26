@@ -29,9 +29,7 @@ func (s *S) TestFormationStreaming(c *C) {
 	c.Assert(streamCtrl.Err(), IsNil)
 	c.Assert(existingFound, Equals, true)
 
-	release = s.createTestRelease(c, &ct.Release{
-		Processes: map[string]ct.ProcessType{"foo": {}},
-	})
+	release = s.createTestRelease(c, &ct.Release{})
 	app = s.createTestApp(c, &ct.App{Name: "streamtest"})
 	formation := s.createTestFormation(c, &ct.Formation{
 		ReleaseID: release.ID,
